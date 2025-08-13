@@ -21,7 +21,7 @@ func Index(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write(data)
+	_, _ = w.Write(data)
 }
 func Upload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -33,11 +33,27 @@ func Upload(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not enought memory", http.StatusInternalServerError)
 		return
 	}
+	if r.MultipartForm != nil {
+		defer r.MultipartForm.RemoveAll()
+	}
 	file, header, err := r.FormFile("file")
-	if err != nil {
+	if err != nil || file == nil {
+		if r.MultipartForm != nil {
+			for _, fhs := range r.MultipartForm.File {
+				if len(fhs) > 0 {
+					header = fhs[0]
+					file, err = header.Open()
+					break
+				}
+			}
+		}
+
+	}
+	if err != nil || file == nil {
 		http.Error(w, "failed to get file", http.StatusInternalServerError)
 		return
 	}
+
 	defer file.Close()
 
 	data, err := io.ReadAll(file)
@@ -54,16 +70,16 @@ func Upload(w http.ResponseWriter, r *http.Request) {
 	ext := filepath.Ext(header.Filename)
 	ts := time.Now().UTC().String()
 	fname := ts + ext
-	f, err := os.Create(fname)
+	out, err := os.Create(fname)
 	if err != nil {
 		http.Error(w, "failed to create result file", http.StatusInternalServerError)
 		return
 	}
-	defer f.Close()
-	if _, err := f.Write([]byte(result)); err != nil {
+	defer out.Close()
+	if _, err := out.Write([]byte(result)); err != nil {
 		http.Error(w, "failed to write result file", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.Write([]byte(result))
+	_, _ = w.Write([]byte(result))
 }
